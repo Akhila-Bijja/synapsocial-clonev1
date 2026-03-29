@@ -242,9 +242,11 @@ function VideoGen({ userId, isMobile, state, setState, onGenDone }) {
         <div style={{ background: '#f59e0b11', border: '1px solid #f59e0b33', borderRadius: '8px', padding: '0.5rem 0.8rem', fontSize: '0.75rem', color: '#f59e0b' }}>🤖 TinyFish + Qwen AI · ~2 min render time</div>
         <div>
           <p style={{ margin: '0 0 0.4rem', fontSize: '0.78rem', color: '#888' }}>Video Prompt</p>
-          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'flex-start' }}>
-            <textarea style={{ ...S.inp, minHeight: '80px', flex: 1 }} placeholder="e.g. A cinematic drone shot over a misty mountain at golden hour..." value={prompt} onChange={e => set({ prompt: e.target.value })} />
-            <MicBtn color="#f59e0b" onResult={txt => set(p => ({ prompt: p.prompt ? p.prompt + ' ' + txt : txt }))} />
+          <div style={{ position: 'relative' }}>
+            <textarea style={{ ...S.inp, minHeight: '80px', paddingRight: '2.8rem' }} placeholder="e.g. A cinematic drone shot over a misty mountain at golden hour..." value={prompt} onChange={e => set({ prompt: e.target.value })} />
+            <div style={{ position: 'absolute', right: '0.5rem', bottom: '0.5rem' }}>
+              <MicBtn color="#f59e0b" onResult={txt => set(p => ({ prompt: p.prompt ? p.prompt + ' ' + txt : txt }))} />
+            </div>
           </div>
         </div>
         <div>
@@ -306,9 +308,11 @@ function ImageGen({ userId, isMobile, state, setState, onGenDone }) {
         <div style={{ background: '#a855f711', border: '1px solid #a855f733', borderRadius: '8px', padding: '0.5rem 0.8rem', fontSize: '0.75rem', color: '#a855f7' }}>🤖 TinyFish + Qwen AI · ~30 second generation</div>
         <div>
           <p style={{ margin: '0 0 0.4rem', fontSize: '0.78rem', color: '#888' }}>Image Prompt</p>
-          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'flex-start' }}>
-            <textarea style={{ ...S.inp, minHeight: '80px', flex: 1 }} placeholder="e.g. A hyper-realistic portrait of a futuristic samurai in neon-lit Tokyo..." value={prompt} onChange={e => set({ prompt: e.target.value })} />
-            <MicBtn color="#a855f7" onResult={txt => set(p => ({ prompt: p.prompt ? p.prompt + ' ' + txt : txt }))} />
+          <div style={{ position: 'relative' }}>
+            <textarea style={{ ...S.inp, minHeight: '80px', paddingRight: '2.8rem' }} placeholder="e.g. A hyper-realistic portrait of a futuristic samurai in neon-lit Tokyo..." value={prompt} onChange={e => set({ prompt: e.target.value })} />
+            <div style={{ position: 'absolute', right: '0.5rem', bottom: '0.5rem' }}>
+              <MicBtn color="#a855f7" onResult={txt => set(p => ({ prompt: p.prompt ? p.prompt + ' ' + txt : txt }))} />
+            </div>
           </div>
         </div>
         <div>

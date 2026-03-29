@@ -1,5 +1,23 @@
 import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
+
+// Mic button for voice input
+function MicBtn({ onResult, color = '#7c3aed' }) {
+  const [active, setActive] = useState(false);
+  const recRef = useRef(null);
+  const toggle = () => {
+    if (active) { try { recRef.current?.abort(); } catch { } recRef.current = null; setActive(false); return; }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert('Speech not supported. Use Chrome.'); return; }
+    const r = new SR();
+    r.lang = 'en-US'; r.continuous = false; r.interimResults = false;
+    r.onresult = (e) => { onResult(e.results[0][0].transcript); };
+    r.onend = () => setActive(false);
+    r.onerror = () => setActive(false);
+    r.start(); recRef.current = r; setActive(true);
+  };
+  return <button onClick={toggle} title={active ? 'Stop' : 'Speak'} style={{ padding: '0.35rem 0.45rem', background: active ? '#ef444422' : 'transparent', color: active ? '#ef4444' : '#555', border: `1px solid ${active ? '#ef444444' : 'transparent'}`, borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', flexShrink: 0, transition: 'all 0.2s', animation: active ? 'micpulse 1s infinite' : 'none' }}>🎙️</button>;
+}
 import Trends from './Trends';
 import Platforms from './Platforms';
 import Jobs from './Jobs';
@@ -524,6 +542,7 @@ export default function Dashboard() {
                             <textarea style={{ flex: 1, padding: '0.3rem 0', background: 'transparent', border: 'none', color: '#fff', fontSize: isMobile ? '1rem' : '0.88rem', outline: 'none', resize: 'none', fontFamily: 'sans-serif', lineHeight: 1.5 }}
                                 rows={isMobile ? 2 : 2} placeholder={`Ask AI to create ${platform} content...`}
                                 value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey} />
+                            <MicBtn color="#7c3aed" onResult={txt => setInput(p => p ? p + ' ' + txt : txt)} />
                             <button style={{ width: isMobile ? '40px' : '32px', height: isMobile ? '40px' : '32px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 900, fontSize: '1.2rem', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                 onClick={sendMessage} disabled={loading}>↑</button>
                         </div>
@@ -578,6 +597,7 @@ export default function Dashboard() {
                     ))}
                 </div>
             )}
+            <style>{`@keyframes micpulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
         </div>
     );
 }
