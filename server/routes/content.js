@@ -189,7 +189,7 @@ router.post('/tts', async (req, res) => {
       'https://openrouter.ai/api/v1/chat/completions',
       {
         model: 'google/gemini-2.5-flash-lite-preview-06-2025',
-        max_tokens: 500,
+        max_tokens: 400,
         messages: [{
           role: 'user',
           content: `Format this for clear ${voice} voice narration. Add natural "..." pauses. Return ONLY the formatted text:\n\n${text}`,
@@ -233,7 +233,7 @@ router.post('/chat', async (req, res) => {
       'https://openrouter.ai/api/v1/chat/completions',
       {
         model: 'google/gemini-2.5-flash-lite-preview-06-2025',
-        max_tokens: 1000,
+        max_tokens: 400,
         messages: [
           { role: 'system', content: systemPrompts[contentType] || systemPrompts.caption },
           ...conversationHistory.slice(-6),

@@ -278,6 +278,7 @@ const startAutoReplyJobs = () => {
     console.log(`🤖 [${new Date().toISOString()}] Cron tick...`);
     await runYouTubeAutoReply().catch(console.error);
     await runGmailAutoReply().catch(console.error);
+    await runInstagramAutoReply().catch(console.error);
     console.log('✅ Cron done');
   });
 
@@ -285,3 +286,77 @@ const startAutoReplyJobs = () => {
 };
 
 module.exports = { startAutoReplyJobs };
+
+// ── Instagram Auto-Reply (added to cron) ─────────────────────────────
+const runInstagramAutoReply = async () => {
+  let IgApiClient, getIgClient, generateAIReply;
+  try {
+    const igBot = require('./routes/instagram-bot');
+    getIgClient = igBot.getIgClient;
+    generateAIReply = igBot.generateAIReply;
+    ({ IgApiClient } = require('instagram-private-api'));
+  } catch (e) {
+    console.log('[IG Auto-Reply] instagram-private-api not installed, skipping');
+    return;
+  }
+
+  const users = await User.find({
+    igBotUsername: { $exists: true, $ne: null },
+    igBotPassword: { $exists: true, $ne: null },
+    igAutomatedPosts: { $exists: true, $not: { $size: 0 } },
+  });
+
+  const eligible = users.filter(u =>
+    u.permissions?.instagramReplyComments === true &&
+    Array.isArray(u.igAutomatedPosts) &&
+    u.igAutomatedPosts.length > 0
+  );
+
+  console.log(`[IG Auto-Reply] ${users.length} IG users total, ${eligible.length} with automation ON`);
+
+  for (const user of eligible) {
+    try {
+      const ig = await getIgClient(user);
+      const fiveMinsAgo = Date.now() - 5 * 60 * 1000;
+
+      for (const mediaId of user.igAutomatedPosts) {
+        try {
+          const commentFeed = ig.feed.mediaComments(mediaId);
+          const comments = await commentFeed.items();
+          const context = (user.igPostContexts || {})[mediaId] || '';
+
+          for (const comment of comments) {
+            const commentTime = comment.created_at * 1000;
+            if (commentTime < fiveMinsAgo) continue;
+
+            const alreadyReplied = (user.repliedIgCommentIds || []).includes(comment.pk);
+            if (alreadyReplied) continue;
+
+            // Skip own comments
+            if (comment.user.username === user.igBotUsername) continue;
+
+            console.log(`[IG] Replying to @${comment.user.username}: "${comment.text.slice(0, 50)}"`);
+
+            const reply = await generateAIReply(comment.text, context);
+            await ig.media.comment({
+              mediaId,
+              text: reply,
+              replyToCommentId: comment.pk,
+            });
+
+            await User.findByIdAndUpdate(user._id, {
+              $addToSet: { repliedIgCommentIds: comment.pk }
+            });
+
+            console.log(`✅ [IG Auto-Reply] Replied: "${reply}"`);
+            await new Promise(r => setTimeout(r, 3000)); // rate limit
+          }
+        } catch (err) {
+          console.error(`❌ [IG] Post ${mediaId}: ${err.message}`);
+        }
+      }
+    } catch (err) {
+      console.error(`❌ [IG Auto-Reply] User ${user.igBotUsername}: ${err.message}`);
+    }
+  }
+};

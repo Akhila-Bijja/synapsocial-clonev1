@@ -25,6 +25,13 @@ youtubeVideoContexts: { type: Map, of: String }, // context per video
   // Instagram
   instagramToken: String,
   instagramAccountId: String,
+  // Instagram Bot
+igBotUsername: String,
+igBotPassword: String,
+igBotSession: String,
+igAutomatedPosts: [String],
+igPostContexts: { type: Map, of: String },
+repliedIgCommentIds: [String],
 
   // Gmail
   gmailToken: String,

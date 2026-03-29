@@ -57,6 +57,7 @@ export default function Platforms() {
   const [gmailModal, setGmailModal] = useState(null);
   const [igTokenInput, setIgTokenInput] = useState('');
   const [linkedinBotModal, setLinkedinBotModal] = useState(false);
+  const [igBotModal, setIgBotModal] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const fileRef = useRef();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -233,9 +234,13 @@ export default function Platforms() {
 
                     {/* Instagram actions */}
                     {platform.id === 'instagram' && (
-                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.3rem' }}>
-                        <button style={{ flex: 1, padding: '0.5rem', background: '#e1306c22', color: '#e1306c', border: '1px solid #e1306c44', borderRadius: '6px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }} onClick={() => setIgModal('comments')}>💬 Comments</button>
-                        <button style={{ flex: 1, padding: '0.5rem', background: '#e1306c22', color: '#e1306c', border: '1px solid #e1306c44', borderRadius: '6px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }} onClick={() => setIgModal('post')}>📸 Post</button>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.3rem' }}>
+                        <button style={{ width: '100%', padding: '0.5rem', background: '#e1306c22', color: '#e1306c', border: '1px solid #e1306c44', borderRadius: '6px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}
+                          onClick={() => setIgBotModal(true)}>🤖 Instagram Bot (Post · Story · Auto-Reply)</button>
+                        <div style={{ display: 'flex', gap: '0.4rem' }}>
+                          <button style={{ flex: 1, padding: '0.4rem', background: '#e1306c22', color: '#e1306c', border: '1px solid #e1306c44', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }} onClick={() => setIgModal('comments')}>💬 Old Comments</button>
+                          <button style={{ flex: 1, padding: '0.4rem', background: '#e1306c22', color: '#e1306c', border: '1px solid #e1306c44', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }} onClick={() => setIgModal('post')}>📸 Post (URL)</button>
+                        </div>
                       </div>
                     )}
 
@@ -268,6 +273,12 @@ export default function Platforms() {
       </div>
 
       {/* Instagram modals */}
+      {igBotModal && (
+        <Modal onClose={() => setIgBotModal(false)} title="🤖 Instagram Bot" wide>
+          <InstagramBot userId={user.id} />
+        </Modal>
+      )}
+
       {linkedinBotModal && (
         <Modal onClose={() => setLinkedinBotModal(false)} title="🤖 LinkedIn Bot Settings" wide>
           <LinkedInBot userId={user.id} />
@@ -1128,6 +1139,340 @@ function LinkedInBot({ userId }) {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {result && (
+        <div style={{ padding: '0.7rem 1rem', background: result.startsWith('✅') ? '#00ff8811' : result.startsWith('⏳') ? '#7c3aed11' : '#ff440011', border: `1px solid ${result.startsWith('✅') ? '#00ff8833' : result.startsWith('⏳') ? '#7c3aed33' : '#ff444433'}`, borderRadius: '8px', fontSize: '0.82rem', color: result.startsWith('✅') ? '#00ff88' : result.startsWith('⏳') ? '#a855f7' : '#ff8888', wordBreak: 'break-word' }}>
+          {result}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Instagram Bot Component ──────────────────────────────────────────
+function InstagramBot({ userId }) {
+  const [creds, setCreds] = useState({ username: '', password: '' });
+  const [hasCredentials, setHasCredentials] = useState(false);
+  const [igUsername, setIgUsername] = useState('');
+  const [tab, setTab] = useState('setup');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  // Media + comments
+  const [media, setMedia] = useState([]);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [automatedPosts, setAutomatedPosts] = useState([]);
+  const [postContexts, setPostContexts] = useState({});
+  const [contextPopup, setContextPopup] = useState(null);
+  const [contextText, setContextText] = useState('');
+  const [expandedPost, setExpandedPost] = useState(null);
+  const [replyLoading, setReplyLoading] = useState({});
+  const [aiReplies, setAiReplies] = useState({});
+  // Post / Story
+  const [postFile, setPostFile] = useState(null);
+  const [postCaption, setPostCaption] = useState('');
+  const [postType, setPostType] = useState('image'); // image | video | story
+  const videoRef = useRef(); const imageRef = useRef(); const storyRef = useRef();
+
+  useEffect(() => {
+    axios.get(`${API_URL}/api/instagram-bot/credentials-status/${userId}`)
+      .then(({ data }) => { setHasCredentials(data.hasCredentials); if (data.username) setIgUsername(data.username); })
+      .catch(console.error);
+    axios.get(`${API_URL}/api/instagram-bot/automated-posts/${userId}`)
+      .then(({ data }) => { setAutomatedPosts(data.automatedPosts || []); setPostContexts(data.postContexts || {}); })
+      .catch(console.error);
+  }, [userId]);
+
+  const saveCredentials = async () => {
+    if (!creds.username || !creds.password) return alert('Fill both fields!');
+    setLoading(true);
+    try {
+      await axios.post(`${API_URL}/api/instagram-bot/save-credentials`, { userId, ...creds });
+      setHasCredentials(true); setIgUsername(creds.username.replace('@', '')); setCreds({ username: '', password: '' });
+      setResult('✅ Credentials saved! Click Test Login to verify.');
+    } catch (err) { setResult('❌ ' + (err.response?.data?.message || err.message)); }
+    setLoading(false);
+  };
+
+  const testLogin = async () => {
+    setLoading(true); setResult('⏳ Connecting to Instagram...');
+    try {
+      const { data } = await axios.post(`${API_URL}/api/instagram-bot/test-login`, { userId });
+      setResult(`✅ ${data.message}`);
+    } catch (err) { setResult('❌ ' + (err.response?.data?.message || err.message)); }
+    setLoading(false);
+  };
+
+  const loadMedia = async () => {
+    setMediaLoading(true); setMedia([]);
+    try {
+      const { data } = await axios.get(`${API_URL}/api/instagram-bot/my-media/${userId}`);
+      setMedia(data.media || []);
+      if (data.media?.length > 0) setExpandedPost(data.media[0].id);
+    } catch (err) { setResult('❌ ' + (err.response?.data?.message || err.message)); }
+    setMediaLoading(false);
+  };
+
+  const toggleAutoReply = (mediaId, caption) => {
+    const isOn = automatedPosts.includes(mediaId);
+    if (isOn) {
+      axios.post(`${API_URL}/api/instagram-bot/automate-post/remove`, { userId, mediaId })
+        .then(() => setAutomatedPosts(p => p.filter(v => v !== mediaId)))
+        .catch(err => alert('❌ ' + err.message));
+    } else {
+      setContextText(postContexts[mediaId] || '');
+      setContextPopup({ mediaId, caption });
+    }
+  };
+
+  const saveAutomation = async () => {
+    if (!contextText.trim()) return alert('Please describe how AI should reply!');
+    try {
+      await axios.post(`${API_URL}/api/instagram-bot/automate-post`, { userId, mediaId: contextPopup.mediaId, context: contextText.trim() });
+      setAutomatedPosts(p => [...new Set([...p, contextPopup.mediaId])]);
+      setPostContexts(p => ({ ...p, [contextPopup.mediaId]: contextText.trim() }));
+      setContextPopup(null); setContextText('');
+    } catch (err) { alert('❌ ' + (err.response?.data?.message || err.message)); }
+  };
+
+  const getAiReply = async (mediaId, comment) => {
+    const key = `${mediaId}_${comment.id}`;
+    setReplyLoading(p => ({ ...p, [key]: true }));
+    try {
+      const { data } = await axios.post(`${API_URL}/api/instagram-bot/ai-reply`, { comment: comment.text, caption: postContexts[mediaId] || '' });
+      setAiReplies(p => ({ ...p, [key]: data.reply }));
+    } catch { setResult('❌ AI reply failed'); }
+    setReplyLoading(p => ({ ...p, [key]: false }));
+  };
+
+  const sendReply = async (mediaId, comment) => {
+    const key = `${mediaId}_${comment.id}`;
+    const reply = aiReplies[key];
+    if (!reply) return;
+    try {
+      await axios.post(`${API_URL}/api/instagram-bot/reply-comment`, { userId, mediaId, commentId: comment.id, reply });
+      setMedia(p => p.map(m => m.id === mediaId ? { ...m, comments: m.comments.map(c => c.id === comment.id ? { ...c, replied: true } : c) } : m));
+      setAiReplies(p => { const n = { ...p }; delete n[key]; return n; });
+    } catch (err) { setResult('❌ ' + (err.response?.data?.message || err.message)); }
+  };
+
+  const postContent = async () => {
+    if (!postFile) return alert('Choose a file first!');
+    setLoading(true); setResult(`⏳ Posting ${postType} to Instagram...`);
+    try {
+      const form = new FormData();
+      form.append(postType === 'story' ? 'image' : postType === 'video' ? 'video' : 'image', postFile);
+      form.append('userId', userId);
+      if (postCaption) form.append('caption', postCaption);
+      const endpoint = postType === 'story' ? 'post-story' : postType === 'video' ? 'post-video' : 'post-image';
+      const { data } = await axios.post(`${API_URL}/api/instagram-bot/${endpoint}`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setResult('✅ ' + data.message); setPostFile(null); setPostCaption('');
+    } catch (err) { setResult('❌ ' + (err.response?.data?.message || err.message)); }
+    setLoading(false);
+  };
+
+  const tabs = [{ id: 'setup', label: '⚙️ Setup' }, { id: 'post', label: '📸 Post' }, { id: 'comments', label: '💬 Comments' }];
+  const mediaTypeIcon = (t) => t === 2 ? '🎥' : t === 8 ? '🖼️' : '📸';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div style={{ display: 'flex', gap: '0.4rem', borderBottom: '1px solid #2a2a3a', paddingBottom: '0.5rem' }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => { setTab(t.id); setResult(null); }}
+            style={{ padding: '0.4rem 0.9rem', background: tab === t.id ? '#e1306c' : 'transparent', color: tab === t.id ? '#fff' : '#888', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: tab === t.id ? 700 : 400 }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Setup ── */}
+      {tab === 'setup' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+          <div style={{ background: '#1e1e2e', border: '1px solid #e1306c33', borderRadius: '10px', padding: '0.8rem', fontSize: '0.78rem', color: '#888', lineHeight: 1.6 }}>
+            🔒 Password <strong style={{ color: '#e1306c' }}>AES-256 encrypted</strong> in MongoDB.<br />
+            🚀 Uses <strong style={{ color: '#e1306c' }}>Instagram Private API</strong> — same calls as the official app.<br />
+            ⚠️ Use a secondary Instagram account first to test safely.
+          </div>
+
+          {hasCredentials
+            ? <div style={{ background: '#00ff8811', border: '1px solid #00ff8833', borderRadius: '8px', padding: '0.7rem', fontSize: '0.82rem', color: '#00ff88' }}>
+                ✅ @{igUsername} credentials saved!
+              </div>
+            : <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                <input style={inpStyle} placeholder="Instagram Username (without @)" value={creds.username} onChange={e => setCreds(p => ({ ...p, username: e.target.value }))} />
+                <input style={inpStyle} type="password" placeholder="Instagram Password" value={creds.password} onChange={e => setCreds(p => ({ ...p, password: e.target.value }))} />
+                <button onClick={saveCredentials} disabled={loading} style={{ padding: '0.7rem', background: '#e1306c', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}>
+                  {loading ? '⏳ Saving...' : '🔒 Save Credentials'}
+                </button>
+              </div>
+          }
+          {hasCredentials && (
+            <button onClick={testLogin} disabled={loading} style={{ padding: '0.6rem', background: '#1e1e2e', color: '#e1306c', border: '1px solid #e1306c44', borderRadius: '8px', cursor: 'pointer', fontSize: '0.82rem' }}>
+              {loading ? '⏳ Connecting...' : '🧪 Test Login'}
+            </button>
+          )}
+          {hasCredentials && (
+            <button onClick={() => { if (window.confirm('Remove saved Instagram credentials?')) { axios.post(`${API_URL}/api/instagram-bot/save-credentials`, { userId, username: '', password: '' }).then(() => { setHasCredentials(false); setIgUsername(''); }); } }}
+              style={{ padding: '0.5rem', background: 'transparent', color: '#ff4444', border: '1px solid #ff444433', borderRadius: '8px', cursor: 'pointer', fontSize: '0.78rem' }}>
+              🗑 Remove Credentials
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Post ── */}
+      {tab === 'post' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+          {!hasCredentials && <div style={{ background: '#ff440011', border: '1px solid #ff444433', borderRadius: '8px', padding: '0.6rem', fontSize: '0.78rem', color: '#ff8888' }}>⚠️ Set up credentials in Setup tab first!</div>}
+
+          {/* Type selector */}
+          <div style={{ display: 'flex', gap: '0.4rem' }}>
+            {[['image', '📸 Photo'], ['video', '🎥 Video'], ['story', '📖 Story']].map(([type, label]) => (
+              <button key={type} onClick={() => { setPostType(type); setPostFile(null); }}
+                style={{ flex: 1, padding: '0.5rem', background: postType === type ? '#e1306c' : '#1e1e2e', color: postType === type ? '#fff' : '#888', border: '1px solid #e1306c44', borderRadius: '8px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: postType === type ? 700 : 400 }}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* File picker */}
+          <input ref={imageRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => setPostFile(e.target.files[0])} />
+          <input ref={videoRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={e => setPostFile(e.target.files[0])} />
+          <input ref={storyRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => setPostFile(e.target.files[0])} />
+
+          {postFile
+            ? <div style={{ padding: '0.7rem', background: '#1e1e2e', border: '1px solid #e1306c44', borderRadius: '8px', fontSize: '0.82rem', color: '#ccc', display: 'flex', justifyContent: 'space-between' }}>
+                <span>{postType === 'video' ? '🎥' : '📸'} {postFile.name}</span>
+                <button onClick={() => setPostFile(null)} style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer' }}>✕</button>
+              </div>
+            : <button onClick={() => { if (postType === 'video') videoRef.current.click(); else if (postType === 'story') storyRef.current.click(); else imageRef.current.click(); }}
+                style={{ padding: '0.8rem', background: '#1e1e2e', color: '#888', border: '2px dashed #e1306c44', borderRadius: '8px', cursor: 'pointer' }}>
+                📂 Choose {postType === 'video' ? 'Video' : postType === 'story' ? 'Story Image' : 'Photo'}
+              </button>
+          }
+
+          {postType !== 'story' && (
+            <textarea style={{ ...inpStyle, minHeight: '80px', resize: 'vertical', fontFamily: 'sans-serif' }}
+              placeholder="Caption + hashtags (optional)" value={postCaption} onChange={e => setPostCaption(e.target.value)} />
+          )}
+
+          <button onClick={postContent} disabled={loading || !hasCredentials || !postFile}
+            style={{ padding: '0.8rem', background: loading || !hasCredentials || !postFile ? '#333' : 'linear-gradient(135deg, #e1306c, #f77737)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}>
+            {loading ? '⏳ Posting...' : `🚀 Post ${postType === 'story' ? 'Story' : postType === 'video' ? 'Video' : 'Photo'} to Instagram`}
+          </button>
+        </div>
+      )}
+
+      {/* ── Comments ── */}
+      {tab === 'comments' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+          {!hasCredentials && <div style={{ background: '#ff440011', border: '1px solid #ff444433', borderRadius: '8px', padding: '0.6rem', fontSize: '0.78rem', color: '#ff8888' }}>⚠️ Set up credentials in Setup tab first!</div>}
+
+          <button onClick={loadMedia} disabled={mediaLoading || !hasCredentials}
+            style={{ padding: '0.8rem', background: mediaLoading || !hasCredentials ? '#333' : '#e1306c', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}>
+            {mediaLoading ? '⏳ Loading posts...' : '📋 Load My Instagram Posts'}
+          </button>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '60vh', overflowY: 'auto' }}>
+            {media.map(post => {
+              const isAutomated = automatedPosts.includes(post.id);
+              const isExpanded = expandedPost === post.id;
+              return (
+                <div key={post.id} style={{ background: '#1e1e2e', borderRadius: '12px', border: `1px solid ${isAutomated ? '#e1306c55' : '#2a2a3a'}` }}>
+                  {/* Post header */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.8rem 1rem', cursor: 'pointer' }}
+                    onClick={() => setExpandedPost(isExpanded ? null : post.id)}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: 0 }}>
+                      {post.thumbnail && <img src={post.thumbnail} alt="" style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover', flexShrink: 0 }} />}
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: '0.82rem', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {mediaTypeIcon(post.mediaType)} {post.caption || '(no caption)'}
+                        </p>
+                        <p style={{ margin: 0, fontSize: '0.7rem', color: '#666' }}>❤️ {post.likeCount} · 💬 {post.commentCount} comments</p>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                      <span style={{ fontSize: '0.7rem', color: isAutomated ? '#e1306c' : '#555' }}>{isAutomated ? '🤖 Auto' : 'Manual'}</span>
+                      <div onClick={() => toggleAutoReply(post.id, post.caption)}
+                        style={{ width: '38px', height: '20px', borderRadius: '10px', background: isAutomated ? '#e1306c' : '#2a2a3a', position: 'relative', cursor: 'pointer' }}>
+                        <div style={{ width: '16px', height: '16px', background: '#fff', borderRadius: '50%', position: 'absolute', top: '2px', transition: 'transform 0.3s', transform: isAutomated ? 'translateX(20px)' : 'translateX(2px)' }} />
+                      </div>
+                      {isAutomated && (
+                        <button onClick={() => { setContextText(postContexts[post.id] || ''); setContextPopup({ mediaId: post.id, caption: post.caption }); }}
+                          style={{ padding: '0.2rem 0.5rem', background: '#e1306c22', color: '#e1306c', border: '1px solid #e1306c44', borderRadius: '6px', cursor: 'pointer', fontSize: '0.68rem' }}>
+                          ✏️ Context
+                        </button>
+                      )}
+                      <span style={{ color: '#555' }}>{isExpanded ? '▲' : '▼'}</span>
+                    </div>
+                  </div>
+
+                  {isAutomated && postContexts[post.id] && (
+                    <p style={{ margin: '0 1rem 0.5rem', fontSize: '0.7rem', color: '#e1306c', fontStyle: 'italic' }}>🧠 "{postContexts[post.id].slice(0, 80)}"</p>
+                  )}
+
+                  {isExpanded && (
+                    <div style={{ borderTop: '1px solid #2a2a3a', padding: '0.6rem' }}>
+                      {post.comments.length === 0
+                        ? <p style={{ color: '#555', fontSize: '0.78rem', textAlign: 'center', padding: '0.5rem' }}>No recent comments</p>
+                        : post.comments.map(c => {
+                            const key = `${post.id}_${c.id}`;
+                            return (
+                              <div key={c.id} style={{ background: '#13131a', borderRadius: '8px', padding: '0.7rem', marginBottom: '0.4rem', border: '1px solid #2a2a3a', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <p style={{ margin: '0 0 0.1rem', fontWeight: 600, fontSize: '0.78rem', color: '#ccc' }}>👤 @{c.author}</p>
+                                  <p style={{ margin: 0, color: '#aaa', fontSize: '0.82rem', fontStyle: 'italic', wordBreak: 'break-word' }}>"{c.text}"</p>
+                                  {aiReplies[key] && (
+                                    <div style={{ marginTop: '0.4rem', padding: '0.5rem', background: '#1e1e2e', borderRadius: '6px', fontSize: '0.78rem', color: '#ccc', fontStyle: 'italic' }}>
+                                      💬 "{aiReplies[key]}"
+                                    </div>
+                                  )}
+                                </div>
+                                <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                                  {c.replied
+                                    ? <span style={{ fontSize: '0.7rem', background: '#00ff8822', color: '#00ff88', padding: '0.2rem 0.5rem', borderRadius: '10px' }}>✅</span>
+                                    : aiReplies[key]
+                                      ? <div style={{ display: 'flex', gap: '0.3rem' }}>
+                                          <button onClick={() => sendReply(post.id, c)} style={{ padding: '0.3rem 0.6rem', background: '#e1306c', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>📤 Send</button>
+                                          <button onClick={() => setAiReplies(p => { const n = { ...p }; delete n[key]; return n; })} style={{ padding: '0.3rem 0.5rem', background: 'transparent', color: '#888', border: '1px solid #2a2a3a', borderRadius: '6px', cursor: 'pointer', fontSize: '0.72rem' }}>↩</button>
+                                        </div>
+                                      : <button disabled={replyLoading[key]} onClick={() => getAiReply(post.id, c)}
+                                          style={{ padding: '0.3rem 0.6rem', background: '#e1306c22', color: '#e1306c', border: '1px solid #e1306c44', borderRadius: '6px', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>
+                                          {replyLoading[key] ? '⏳' : '🧠 AI'}
+                                        </button>
+                                  }
+                                </div>
+                              </div>
+                            );
+                          })
+                      }
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Context popup */}
+      {contextPopup && (
+        <div style={{ position: 'fixed', inset: 0, background: '#000000cc', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ background: '#13131a', border: '1px solid #e1306c44', borderRadius: '20px', padding: '1.5rem', maxWidth: '480px', width: '100%', boxSizing: 'border-box' }}>
+            <h3 style={{ margin: '0 0 0.5rem', color: '#fff' }}>🤖 Auto-Reply Context</h3>
+            <p style={{ margin: '0 0 1rem', fontSize: '0.78rem', color: '#888' }}>📸 {contextPopup.caption?.slice(0, 60) || 'Instagram post'}</p>
+            <p style={{ margin: '0 0 0.6rem', fontSize: '0.82rem', color: '#ccc' }}>How should AI reply to comments on this post?</p>
+            <textarea
+              style={{ width: '100%', padding: '0.9rem', background: '#1e1e2e', border: '1px solid #e1306c33', borderRadius: '10px', color: '#fff', fontSize: '0.85rem', outline: 'none', resize: 'vertical', minHeight: '100px', boxSizing: 'border-box', fontFamily: 'sans-serif', lineHeight: 1.6, marginBottom: '0.8rem' }}
+              placeholder={'Example: "This is a fitness post. Reply motivationally to comments, use relevant emojis, keep it short."'}
+              value={contextText} onChange={e => setContextText(e.target.value)}
+            />
+            <div style={{ display: 'flex', gap: '0.8rem' }}>
+              <button onClick={saveAutomation} style={{ flex: 1, padding: '0.8rem', background: '#e1306c', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 700 }}>✅ Enable Auto-Reply</button>
+              <button onClick={() => { setContextPopup(null); setContextText(''); }} style={{ padding: '0.8rem 1rem', background: 'transparent', color: '#888', border: '1px solid #2a2a3a', borderRadius: '10px', cursor: 'pointer' }}>Cancel</button>
+            </div>
+          </div>
         </div>
       )}
 
