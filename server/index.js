@@ -51,7 +51,7 @@ app.use('/api/chats', require('./routes/chats'));
 app.use('/api/platforms/youtube', require('./routes/youtube'));
 app.use('/api/gmail', require('./routes/gmail'));
 app.use('/api/linkedin-bot', require('./routes/linkedin-bot'));
-
+app.use('/api/content', require('./routes/content'));
 // Health check + keep-alive
 app.get('/health', (req, res) => res.json({ status: 'alive', time: new Date().toISOString(), uptime: `${Math.floor(process.uptime() / 60)} mins` }));
 app.get('/', (req, res) => res.json({ app: '🧠 SynapSocial API', status: '✅ Running', time: new Date().toISOString() }));
