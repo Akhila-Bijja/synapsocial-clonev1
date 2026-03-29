@@ -4,12 +4,20 @@ import axios from 'axios';
 const API_URL = process.env.REACT_APP_API_URL || 'https://synapsocial-api.onrender.com';
 const ASPECT_RATIOS = ['1:1', '3:4', '4:3', '16:9', '9:16'];
 const TABS = [
-  { id: 'video', icon: '🎬', label: 'Video Gen'      },
-  { id: 'image', icon: '🖼️', label: 'Image Gen'      },
+  { id: 'video', icon: '🎬', label: 'Video Gen' },
+  { id: 'image', icon: '🖼️', label: 'Image Gen' },
   { id: 'audio', icon: '🔊', label: 'Text to Speech' },
-  { id: 'asr',   icon: '🎙️', label: 'Speech to Text' },
-  { id: 'chat',  icon: '✍️', label: 'Content Chat'   },
+  { id: 'asr', icon: '🎙️', label: 'Speech to Text' },
+  { id: 'chat', icon: '✍️', label: 'Content Chat' },
 ];
+
+const TAB_COLORS = {
+  video: '#f59e0b',
+  image: '#a855f7',
+  audio: '#00bcd4',
+  asr: '#ef4444',
+  chat: '#7c3aed',
+};
 
 const S = {
   inp: { width: '100%', padding: '0.75rem 0.9rem', background: '#0d0d14', border: '1px solid #2a2a3a', borderRadius: '10px', color: '#fff', fontSize: '0.87rem', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical' },
@@ -34,12 +42,11 @@ function Banner({ text, type = 'info' }) {
   return <div style={{ padding: '0.65rem 0.9rem', background: c.bg, border: `1px solid ${c.border}`, borderRadius: '8px', fontSize: '0.82rem', color: c.color }}>{text}</div>;
 }
 
-// FIX 3: mic button for any text input
 function MicBtn({ onResult, color = '#7c3aed' }) {
   const [active, setActive] = useState(false);
   const recRef = useRef(null);
   const toggle = () => {
-    if (active) { try { recRef.current?.abort(); } catch {} recRef.current = null; setActive(false); return; }
+    if (active) { try { recRef.current?.abort(); } catch { } recRef.current = null; setActive(false); return; }
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { alert('Speech not supported. Use Chrome.'); return; }
     const r = new SR();
@@ -52,13 +59,82 @@ function MicBtn({ onResult, color = '#7c3aed' }) {
   return <button onClick={toggle} title={active ? 'Stop' : 'Speak'} style={{ padding: '0.45rem 0.55rem', background: active ? '#ef444422' : '#1e1e2e', color: active ? '#ef4444' : '#555', border: `1px solid ${active ? '#ef444444' : '#2a2a3a'}`, borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', flexShrink: 0, transition: 'all 0.2s', animation: active ? 'micpulse 1s infinite' : 'none' }}>🎙️</button>;
 }
 
-// FIX 2: state hoisted to parent so switching tabs never loses results
+/* ── Generation History — shows previous results across all tabs ─── */
+function GenerationHistory({ history, currentTab }) {
+  if (!history.length) return null;
+  // Filter out items from the current tab — show only cross-tab items
+  const otherHistory = history.filter(h => h.tab !== currentTab);
+  if (!otherHistory.length) return null;
+
+  return (
+    <div style={{ marginTop: '1.2rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.7rem' }}>
+        <div style={{ height: '1px', flex: 1, background: 'linear-gradient(90deg, transparent, #2a2a3a, transparent)' }} />
+        <span style={{ fontSize: '0.72rem', color: '#555', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>📋 Previous Generations</span>
+        <div style={{ height: '1px', flex: 1, background: 'linear-gradient(90deg, transparent, #2a2a3a, transparent)' }} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+        {otherHistory.slice().reverse().map((item, i) => {
+          const tabColor = TAB_COLORS[item.tab] || '#7c3aed';
+          const tabLabel = TABS.find(t => t.id === item.tab)?.label || item.tab;
+          const tabIcon = TABS.find(t => t.id === item.tab)?.icon || '📄';
+          return (
+            <div key={i} style={{ background: '#0d0d14', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '0.85rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', transition: 'border-color 0.2s', borderLeft: `3px solid ${tabColor}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span style={{ fontSize: '0.85rem' }}>{tabIcon}</span>
+                  <span style={{ fontSize: '0.68rem', color: tabColor, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{tabLabel}</span>
+                </div>
+                <span style={{ fontSize: '0.62rem', color: '#444' }}>{new Date(item.timestamp).toLocaleTimeString()}</span>
+              </div>
+              {/* Prompt / Input text */}
+              {item.prompt && (
+                <div style={{ fontSize: '0.8rem', color: '#888', lineHeight: 1.5 }}>
+                  <span style={{ color: '#555', fontWeight: 600 }}>Prompt: </span>
+                  {item.prompt.length > 120 ? item.prompt.slice(0, 120) + '…' : item.prompt}
+                </div>
+              )}
+              {/* Media result */}
+              {item.type === 'image' && item.imageUrl && (
+                <img src={item.imageUrl} alt="Generated" style={{ width: '100%', maxHeight: '180px', objectFit: 'cover', borderRadius: '8px' }} />
+              )}
+              {item.type === 'video' && item.videoUrl && (
+                <video src={item.videoUrl} controls style={{ width: '100%', maxHeight: '180px', borderRadius: '8px' }} />
+              )}
+              {item.type === 'tts' && (
+                <div style={{ fontSize: '0.75rem', color: '#00bcd4', fontStyle: 'italic' }}>🔊 Audio was played via browser</div>
+              )}
+              {item.type === 'stt' && item.transcript && (
+                <div style={{ fontSize: '0.78rem', color: '#ccc', background: '#13131a', padding: '0.5rem 0.7rem', borderRadius: '8px', maxHeight: '80px', overflow: 'hidden' }}>
+                  📝 {item.transcript.length > 150 ? item.transcript.slice(0, 150) + '…' : item.transcript}
+                </div>
+              )}
+              {item.type === 'chat' && item.reply && (
+                <div style={{ fontSize: '0.78rem', color: '#ccc', background: '#13131a', padding: '0.5rem 0.7rem', borderRadius: '8px', maxHeight: '80px', overflow: 'hidden', whiteSpace: 'pre-wrap' }}>
+                  ✍️ {item.reply.length > 150 ? item.reply.slice(0, 150) + '…' : item.reply}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────
 export default function Content() {
   const [tab, setTab] = useState('video');
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const [videoState, setVideoState] = useState({ prompt: '', ratio: '16:9', status: 'idle', msg: '', videoUrl: '', pageUrl: '', pollCount: 0 });
   const [imageState, setImageState] = useState({ prompt: '', ratio: '1:1', loading: false, imageUrl: '', error: '' });
+
+  // ── Shared generation history across all tabs ──
+  const [genHistory, setGenHistory] = useState([]);
+  const addHistory = useCallback((entry) => {
+    setGenHistory(prev => [...prev, { ...entry, timestamp: Date.now() }]);
+  }, []);
 
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth <= 768);
@@ -80,22 +156,27 @@ export default function Content() {
           </button>
         ))}
       </div>
-      {/* FIX 2: display:none keeps component mounted — state never lost */}
+      {/* display:none keeps component mounted — state never lost */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
         <div style={{ display: tab === 'video' ? 'flex' : 'none', flexDirection: 'column', gap: '1rem' }}>
-          <VideoGen userId={user.id} isMobile={isMobile} state={videoState} setState={setVideoState} />
+          <VideoGen userId={user.id} isMobile={isMobile} state={videoState} setState={setVideoState} onGenDone={addHistory} />
+          <GenerationHistory history={genHistory} currentTab="video" />
         </div>
         <div style={{ display: tab === 'image' ? 'flex' : 'none', flexDirection: 'column', gap: '1rem' }}>
-          <ImageGen userId={user.id} isMobile={isMobile} state={imageState} setState={setImageState} />
+          <ImageGen userId={user.id} isMobile={isMobile} state={imageState} setState={setImageState} onGenDone={addHistory} />
+          <GenerationHistory history={genHistory} currentTab="image" />
         </div>
         <div style={{ display: tab === 'audio' ? 'flex' : 'none', flexDirection: 'column', gap: '1rem' }}>
-          <TextToSpeech />
+          <TextToSpeech onGenDone={addHistory} />
+          <GenerationHistory history={genHistory} currentTab="audio" />
         </div>
         <div style={{ display: tab === 'asr' ? 'flex' : 'none', flexDirection: 'column', gap: '1rem' }}>
-          <SpeechToText />
+          <SpeechToText onGenDone={addHistory} />
+          <GenerationHistory history={genHistory} currentTab="asr" />
         </div>
         <div style={{ display: tab === 'chat' ? 'flex' : 'none', flexDirection: 'column', height: '70vh', gap: '0.6rem' }}>
-          <ContentChat userId={user.id} isMobile={isMobile} />
+          <ContentChat userId={user.id} isMobile={isMobile} onGenDone={addHistory} />
+          <GenerationHistory history={genHistory} currentTab="chat" />
         </div>
       </div>
       <style>{`
@@ -107,13 +188,25 @@ export default function Content() {
   );
 }
 
-// VIDEO GEN — FIX 1: 2 min wait | FIX 2: state from parent | FIX 3: mic
-function VideoGen({ userId, isMobile, state, setState }) {
+// VIDEO GEN
+function VideoGen({ userId, isMobile, state, setState, onGenDone }) {
   const { prompt, ratio, status, msg, videoUrl, pageUrl, pollCount } = state;
   const set = useCallback((patch) => setState(p => ({ ...p, ...(typeof patch === 'function' ? patch(p) : patch) })), [setState]);
   const pollRef = useRef(null); const firstRef = useRef(null);
   const clearAll = () => { clearInterval(pollRef.current); clearTimeout(firstRef.current); pollRef.current = null; firstRef.current = null; };
+  const hasLoggedRef = useRef(false);
   useEffect(() => () => clearAll(), []);
+
+  // Log to history when video is done
+  useEffect(() => {
+    if (status === 'done' && videoUrl && !hasLoggedRef.current) {
+      hasLoggedRef.current = true;
+      onGenDone({ tab: 'video', type: 'video', prompt, videoUrl });
+    }
+    if (status === 'idle' || status === 'submitting') {
+      hasLoggedRef.current = false;
+    }
+  }, [status, videoUrl, prompt, onGenDone]);
 
   const attemptFetch = useCallback(async (pUrl) => {
     try {
@@ -126,7 +219,6 @@ function VideoGen({ userId, isMobile, state, setState }) {
 
   const startPolling = useCallback((pUrl) => {
     clearAll();
-    // FIX 1: first check after 2 minutes (reduced from 4)
     firstRef.current = setTimeout(async () => {
       await attemptFetch(pUrl);
       pollRef.current = setInterval(() => attemptFetch(pUrl), 60000);
@@ -143,7 +235,7 @@ function VideoGen({ userId, isMobile, state, setState }) {
     } catch (err) { set({ status: 'error', msg: err.response?.data?.message || 'Submission failed.' }); }
   };
 
-  const isGenerating = ['submitting','pending','polling'].includes(status);
+  const isGenerating = ['submitting', 'pending', 'polling'].includes(status);
   return (
     <>
       <div style={S.card}>
@@ -183,10 +275,23 @@ function VideoGen({ userId, isMobile, state, setState }) {
   );
 }
 
-// IMAGE GEN — FIX 2: state from parent | FIX 3: mic
-function ImageGen({ userId, isMobile, state, setState }) {
+// IMAGE GEN
+function ImageGen({ userId, isMobile, state, setState, onGenDone }) {
   const { prompt, ratio, loading, imageUrl, error } = state;
   const set = useCallback((patch) => setState(p => ({ ...p, ...(typeof patch === 'function' ? patch(p) : patch) })), [setState]);
+  const hasLoggedRef = useRef(false);
+
+  // Log to history when image is done
+  useEffect(() => {
+    if (imageUrl && !hasLoggedRef.current) {
+      hasLoggedRef.current = true;
+      onGenDone({ tab: 'image', type: 'image', prompt, imageUrl });
+    }
+    if (!imageUrl) {
+      hasLoggedRef.current = false;
+    }
+  }, [imageUrl, prompt, onGenDone]);
+
   const generate = async () => {
     if (!prompt.trim()) return;
     set({ loading: true, error: '', imageUrl: '' });
@@ -231,7 +336,7 @@ function ImageGen({ userId, isMobile, state, setState }) {
 }
 
 // TEXT TO SPEECH — browser Web Speech API
-function TextToSpeech() {
+function TextToSpeech({ onGenDone }) {
   const [text, setText] = useState(''); const [rate, setRate] = useState(1); const [pitch, setPitch] = useState(1);
   const [speaking, setSpeaking] = useState(false); const [voices, setVoices] = useState([]); const [selVoice, setSelVoice] = useState(''); const [error, setError] = useState('');
   useEffect(() => { const load = () => { const v = window.speechSynthesis.getVoices(); if (v.length) { setVoices(v); setSelVoice(v[0]?.name || ''); } }; load(); window.speechSynthesis.onvoiceschanged = load; }, []);
@@ -241,7 +346,13 @@ function TextToSpeech() {
     const utt = new SpeechSynthesisUtterance(text);
     utt.rate = rate; utt.pitch = pitch;
     const v = voices.find(v => v.name === selVoice); if (v) utt.voice = v;
-    utt.onstart = () => setSpeaking(true); utt.onend = () => setSpeaking(false); utt.onerror = () => { setSpeaking(false); setError('Speech error.'); };
+    utt.onstart = () => setSpeaking(true);
+    utt.onend = () => {
+      setSpeaking(false);
+      // Log to history on successful speech
+      onGenDone({ tab: 'audio', type: 'tts', prompt: text });
+    };
+    utt.onerror = () => { setSpeaking(false); setError('Speech error.'); };
     window.speechSynthesis.speak(utt);
   };
   return (
@@ -265,14 +376,26 @@ function TextToSpeech() {
   );
 }
 
-// SPEECH TO TEXT — FIX 4: abort() for instant stop, ref tracks state
-function SpeechToText() {
+// SPEECH TO TEXT
+function SpeechToText({ onGenDone }) {
   const [recording, setRecording] = useState(false); const [transcript, setTranscript] = useState(''); const [interim, setInterim] = useState('');
   const [error, setError] = useState(''); const [seconds, setSeconds] = useState(0); const [lang, setLang] = useState('en-US');
   const recRef = useRef(null); const timerRef = useRef(null); const isRec = useRef(false);
+  const lastLoggedRef = useRef('');
   const langs = [{ code: 'en-US', label: '🇺🇸 English (US)' }, { code: 'en-GB', label: '🇬🇧 English (UK)' }, { code: 'hi-IN', label: '🇮🇳 Hindi' }, { code: 'es-ES', label: '🇪🇸 Spanish' }, { code: 'fr-FR', label: '🇫🇷 French' }, { code: 'de-DE', label: '🇩🇪 German' }, { code: 'zh-CN', label: '🇨🇳 Chinese' }, { code: 'ja-JP', label: '🇯🇵 Japanese' }];
-  // FIX 4: abort() is synchronous — stops immediately
-  const stop = useCallback(() => { isRec.current = false; setRecording(false); setInterim(''); clearInterval(timerRef.current); try { recRef.current?.abort(); } catch {} recRef.current = null; }, []);
+  const stop = useCallback(() => {
+    isRec.current = false; setRecording(false); setInterim(''); clearInterval(timerRef.current);
+    try { recRef.current?.abort(); } catch { } recRef.current = null;
+  }, []);
+
+  // Log transcript to history when recording stops and there's content
+  useEffect(() => {
+    if (!recording && transcript.trim() && transcript !== lastLoggedRef.current) {
+      lastLoggedRef.current = transcript;
+      onGenDone({ tab: 'asr', type: 'stt', prompt: 'Speech to Text', transcript: transcript.trim() });
+    }
+  }, [recording, transcript, onGenDone]);
+
   const start = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { setError('Not supported. Use Chrome or Edge.'); return; }
@@ -285,7 +408,7 @@ function SpeechToText() {
     timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000);
   };
   const toggle = () => recording ? stop() : start();
-  const fmt = (s) => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+  const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <div style={S.card}>
@@ -320,8 +443,8 @@ function SpeechToText() {
   );
 }
 
-// CONTENT CHAT — FIX 3: mic | tokens reduced in backend
-function ContentChat({ userId, isMobile }) {
+// CONTENT CHAT
+function ContentChat({ userId, isMobile, onGenDone }) {
   const [msgs, setMsgs] = useState([{ role: 'ai', text: "✍️ Hey! Ask me to write captions, scripts, blog posts, LinkedIn posts, tweets, or YouTube descriptions!" }]);
   const [input, setInput] = useState(''); const [loading, setLoading] = useState(false); const [cType, setCType] = useState('caption'); const [history, setHistory] = useState([]);
   const bottomRef = useRef();
@@ -336,6 +459,8 @@ function ContentChat({ userId, isMobile }) {
       const { data } = await axios.post(`${API_URL}/api/content/chat`, { userId, message: userMsg, contentType: cType, conversationHistory: history });
       setHistory(p => [...p, { role: 'user', content: userMsg }, { role: 'assistant', content: data.reply }]);
       setMsgs(p => [...p, { role: 'ai', text: data.reply, copyable: true }]);
+      // Log to history
+      onGenDone({ tab: 'chat', type: 'chat', prompt: userMsg, reply: data.reply });
     } catch (err) { setMsgs(p => [...p, { role: 'ai', text: '❌ ' + (err.response?.data?.message || 'Error. Try again.') }]); }
     setLoading(false);
   };
@@ -360,7 +485,6 @@ function ContentChat({ userId, isMobile }) {
         <div ref={bottomRef} />
       </div>
       <button onClick={() => setInput(quickPrompts[cType])} style={{ padding: '0.3rem 0.7rem', background: '#13131a', color: '#444', border: '1px solid #1e1e2e', borderRadius: '8px', cursor: 'pointer', fontSize: '0.7rem', textAlign: 'left', fontFamily: 'inherit' }}>💡 {quickPrompts[cType].slice(0, 55)}...</button>
-      {/* FIX 3: mic in chat input */}
       <div style={{ display: 'flex', gap: '0.4rem', background: '#13131a', border: '1px solid #2a2a3a', borderRadius: '12px', padding: '0.5rem 0.75rem', alignItems: 'flex-end' }}>
         <textarea style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', fontSize: '0.87rem', outline: 'none', resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }} rows={2} placeholder={`Ask AI to write a ${cType}...`} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey} />
         <MicBtn color="#7c3aed" onResult={txt => setInput(p => p ? p + ' ' + txt : txt)} />
