@@ -4,6 +4,7 @@ import Trends from './Trends';
 import Platforms from './Platforms';
 import Jobs from './Jobs';
 import Settings from './Settings';
+import Content from './Content'; 
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://synapsocial-api.onrender.com';
 
@@ -325,6 +326,7 @@ export default function Dashboard() {
                         { id: 'jobs', icon: '💼', label: 'Job Scanner' },
                         { id: 'schedule', icon: '📅', label: 'Schedule' },
                         { id: 'settings', icon: '⚙️', label: 'Settings' },
+                        { id: 'content', icon: '🎨', label: 'Content Creator' }
                     ].map(item => (
                         <div key={item.id}
                             style={activeNav === item.id
@@ -539,6 +541,7 @@ export default function Dashboard() {
                         <p style={{ color: '#888' }}>Coming Soon!</p>
                     </div>
                 )}
+                {activeNav === 'content' && <Content />}   
             </div>
 
             {/* Mobile Bottom Navigation Bar */}
