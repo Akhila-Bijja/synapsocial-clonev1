@@ -100,7 +100,7 @@ export default function Platforms() {
       const platforms = data.platforms || {};
       if (data.igBotUsername) platforms.instagram = true;
       setConnected(platforms);
-      setPermissions({
+      const perms = {
         linkedinAutoPost: data.permissions?.linkedinAutoPost || false,
         linkedinReplyComments: data.permissions?.linkedinReplyComments || false,
         linkedinSendDMs: data.permissions?.linkedinSendDMs || false,
@@ -110,7 +110,9 @@ export default function Platforms() {
         youtubeAutoPost: data.permissions?.youtubeAutoPost || false,
         youtubeReplyComments: data.permissions?.youtubeReplyComments || false,
         gmailAutoReply: data.permissions?.gmailAutoReply || false,
-      });
+      };
+      setPermissions(perms);
+      localStorage.setItem('synapPermissions', JSON.stringify(perms));
       if (data.resumeName) setResumeName(data.resumeName);
     } catch (err) { console.error(err); }
     setLoading(false);
@@ -152,6 +154,7 @@ export default function Platforms() {
   const togglePermission = async (key) => {
     const updated = { ...permissions, [key]: !permissions[key] };
     setPermissions(updated);
+    localStorage.setItem('synapPermissions', JSON.stringify(updated));
     try {
       await axios.post(`${API_URL}/api/platforms/permissions`, { userId: user.id, permissions: updated });
       setSaveMsg('✅ Saved!'); setTimeout(() => setSaveMsg(''), 2000);
