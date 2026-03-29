@@ -157,32 +157,35 @@ export default function Content() {
         ))}
       </div>
       {/* display:none keeps component mounted — state never lost */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        <div style={{ display: tab === 'video' ? 'flex' : 'none', flexDirection: 'column', gap: '1rem' }}>
+      <div style={{ flex: 1, overflowY: tab === 'chat' ? 'hidden' : 'auto', paddingRight: '0.4rem', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ display: tab === 'video' ? 'flex' : 'none', flexDirection: 'column', gap: '1rem', flexShrink: 0 }}>
           <VideoGen userId={user.id} isMobile={isMobile} state={videoState} setState={setVideoState} onGenDone={addHistory} />
           <GenerationHistory history={genHistory} currentTab="video" />
         </div>
-        <div style={{ display: tab === 'image' ? 'flex' : 'none', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ display: tab === 'image' ? 'flex' : 'none', flexDirection: 'column', gap: '1rem', flexShrink: 0 }}>
           <ImageGen userId={user.id} isMobile={isMobile} state={imageState} setState={setImageState} onGenDone={addHistory} />
           <GenerationHistory history={genHistory} currentTab="image" />
         </div>
-        <div style={{ display: tab === 'audio' ? 'flex' : 'none', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ display: tab === 'audio' ? 'flex' : 'none', flexDirection: 'column', gap: '1rem', flexShrink: 0 }}>
           <TextToSpeech onGenDone={addHistory} />
           <GenerationHistory history={genHistory} currentTab="audio" />
         </div>
-        <div style={{ display: tab === 'asr' ? 'flex' : 'none', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ display: tab === 'asr' ? 'flex' : 'none', flexDirection: 'column', gap: '1rem', flexShrink: 0 }}>
           <SpeechToText onGenDone={addHistory} />
           <GenerationHistory history={genHistory} currentTab="asr" />
         </div>
-        <div style={{ display: tab === 'chat' ? 'flex' : 'none', flexDirection: 'column', height: '70vh', gap: '0.6rem' }}>
+        <div style={{ display: tab === 'chat' ? 'flex' : 'none', flexDirection: 'column', flex: 1, gap: '0.6rem', minHeight: 0, paddingBottom: isMobile ? '0' : '0.5rem' }}>
           <ContentChat userId={user.id} isMobile={isMobile} onGenDone={addHistory} />
-          <GenerationHistory history={genHistory} currentTab="chat" />
         </div>
       </div>
       <style>{`
         @keyframes micpulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
         @keyframes ripple   { 0%{transform:scale(1);opacity:0.4} 100%{transform:scale(1.8);opacity:0} }
         @keyframes blink    { 0%,100%{opacity:1} 50%{opacity:0.2} }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #444; }
       `}</style>
     </div>
   );
@@ -544,7 +547,7 @@ function ContentChat({ userId, isMobile, onGenDone }) {
       <div style={{ display: 'flex', gap: '0.4rem', background: '#13131a', border: '1px solid #2a2a3a', borderRadius: '12px', padding: '0.5rem 0.75rem', alignItems: 'flex-end' }}>
         <textarea style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', fontSize: '0.87rem', outline: 'none', resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }} rows={2} placeholder={`Ask AI to write a ${cType}...`} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey} />
         <MicBtn color="#7c3aed" onResult={txt => setInput(p => p ? p + ' ' + txt : txt)} />
-        <button onClick={send} disabled={loading || !input.trim()} style={{ width: '34px', height: '34px', background: loading || !input.trim() ? '#1e1e2e' : '#7c3aed', color: loading || !input.trim() ? '#444' : '#fff', border: 'none', borderRadius: '10px', cursor: loading || !input.trim() ? 'not-allowed' : 'pointer', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>↑</button>
+        <button onClick={send} disabled={loading || !input.trim()} style={{ width: '38px', height: '38px', background: loading || !input.trim() ? '#1e1e2e' : '#7c3aed', color: loading || !input.trim() ? '#444' : '#fff', border: 'none', borderRadius: '10px', cursor: loading || !input.trim() ? 'not-allowed' : 'pointer', fontSize: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>↑</button>
       </div>
     </>
   );

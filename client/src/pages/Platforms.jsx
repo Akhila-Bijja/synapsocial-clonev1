@@ -58,6 +58,7 @@ export default function Platforms() {
   const [igTokenInput, setIgTokenInput] = useState('');
   const [linkedinBotModal, setLinkedinBotModal] = useState(false);
   const [igBotModal, setIgBotModal] = useState(false);
+  const [igBotConnected, setIgBotConnected] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const fileRef = useRef();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -70,6 +71,10 @@ export default function Platforms() {
 
   useEffect(() => {
     fetchStatus();
+    // ✅ Check Instagram Bot credentials status on load
+    axios.get(`${API_URL}/api/instagram-bot/credentials-status/${user.id}`)
+      .then(({ data }) => { if (data.hasCredentials) setConnected(prev => ({ ...prev, instagram: true })); })
+      .catch(console.error);
     const params = new URLSearchParams(window.location.search);
     const conn = params.get('connected');
     const igUser = params.get('ig_user');
@@ -91,7 +96,10 @@ export default function Platforms() {
   const fetchStatus = async () => {
     try {
       const { data } = await axios.get(`${API_URL}/api/platforms/status/${user.id}`);
-      setConnected(data.platforms || {});
+      // ✅ Also check igBotUsername for Instagram connected status
+      const platforms = data.platforms || {};
+      if (data.igBotUsername) platforms.instagram = true;
+      setConnected(platforms);
       setPermissions({
         linkedinAutoPost: data.permissions?.linkedinAutoPost || false,
         linkedinReplyComments: data.permissions?.linkedinReplyComments || false,
@@ -119,7 +127,7 @@ export default function Platforms() {
   };
 
   const connectPlatform = (platform) => {
-    if (platform.id === 'instagram') { setIgModal('connect'); return; }
+    if (platform.id === 'instagram') { setIgBotModal(true); return; } // ✅ Use new bot system
     if (!platform.authUrl) { alert(`${platform.name} OAuth coming soon!`); return; }
     window.location.href = `${platform.authUrl}?userId=${user.id}`;
   };
@@ -128,7 +136,9 @@ export default function Platforms() {
     if (!window.confirm(`Disconnect ${platformId}?`)) return;
     try {
       if (platformId === 'instagram') {
-        await axios.post(`${API_URL}/api/instagram/disconnect`, { userId: user.id });
+        // ✅ Clear both old token AND new bot credentials
+        try { await axios.post(`${API_URL}/api/instagram/disconnect`, { userId: user.id }); } catch {}
+        await axios.post(`${API_URL}/api/instagram-bot/save-credentials`, { userId: user.id, username: '', password: '' });
       } else if (platformId === 'gmail') {
         await axios.post(`${API_URL}/api/gmail/disconnect`, { userId: user.id });
       } else {

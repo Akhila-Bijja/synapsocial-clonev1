@@ -80,6 +80,7 @@ router.get('/status/:userId', async (req, res) => {
         instagram: user.connectedPlatforms?.instagram || false,
         youtube: user.connectedPlatforms?.youtube || false,
         gmail: user.connectedPlatforms?.gmail || false,
+        igBotUsername: user.igBotUsername || null,
       },
       permissions: {
         linkedinAutoPost: user.permissions?.linkedinAutoPost || false,
