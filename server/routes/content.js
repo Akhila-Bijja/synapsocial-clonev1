@@ -1,228 +1,259 @@
 // server/routes/content.js
-// Content Creator API — AgentX (image, chat, TTS, ASR) + Magic Hour (video)
+// Content Creator — TinyFish browser automation on chat.qwen.ai
+// Video Gen + Image Gen via TinyFish→Qwen | TTS via Web Speech | Chat via OpenRouter
 
 const router = require('express').Router();
 const axios = require('axios');
 
-const AGENTX_BASE = 'https://api.agentx.so/api/v1';
-const AGENTX_KEY = process.env.AGENTX_API_KEY;
-const MAGIC_HOUR_KEY = process.env.MAGIC_HOUR_API_KEY;
+const TINYFISH_KEY = process.env.TINYFISH_API_KEY;
+const TINYFISH_URL = 'https://agent.tinyfish.ai/v1/automation/run';
+const QWEN_EMAIL = process.env.QWEN_EMAIL || 'nelico4820@lxbeta.com';
+const QWEN_PASSWORD = process.env.QWEN_PASSWORD || '313@Rohit';
 
-const agentxHeaders = () => ({
-  'Authorization': `Bearer ${AGENTX_KEY}`,
+const tfHeaders = () => ({
+  'X-API-Key': TINYFISH_KEY,
   'Content-Type': 'application/json',
 });
 
-// ── Helper: create or reuse an AgentX conversation ───────────────
-const getOrCreateConversation = async (agentId, existingConvId) => {
-  if (existingConvId) return existingConvId;
-  const { data } = await axios.post(
-    `${AGENTX_BASE}/access/agents/${agentId}/conversations/new`,
-    {},
-    { headers: agentxHeaders() }
-  );
-  return data.id || data.conversationId || data._id;
+// ── Fix Qwen CDN domain ───────────────────────────────────────
+const fixCdn = (url) => (url || '').replace('cdn.qwen.ai', 'cdn.qwenlm.ai');
+
+// ── Extract any media URL from TinyFish response ──────────────
+const extractMediaUrl = (data) => {
+  const obj = data?.result || data;
+  const str = JSON.stringify(obj);
+
+  // Try known keys first
+  const direct = obj?.download_url || obj?.video_url || obj?.image_url ||
+    obj?.url || obj?.file_url || obj?.mp4_url || obj?.link ||
+    obj?.output || obj?.media_url || obj?.source || obj?.src;
+  if (direct) return fixCdn(direct);
+
+  // CDN regex
+  const cdn = str.match(/https:\/\/cdn\.qwenl?m?\.ai\/[^"\\]+/);
+  if (cdn) return fixCdn(cdn[0]);
+
+  // Any media file URL
+  const media = str.match(/https:\/\/[^"\\]+\.(?:mp4|mp3|jpg|jpeg|png|webp|gif)[^"\\]*/i);
+  if (media) return fixCdn(media[0]);
+
+  return null;
 };
 
-// ── Helper: send message to AgentX agent ─────────────────────────
-const sendToAgent = async (conversationId, message) => {
-  const { data } = await axios.post(
-    `${AGENTX_BASE}/access/conversations/${conversationId}/message`,
-    { message },
-    { headers: agentxHeaders() }
-  );
-  // AgentX returns the AI reply text
-  return data.reply || data.message || data.content || data.text || JSON.stringify(data);
+// ── Extract page_url from TinyFish step 1 ────────────────────
+const extractPageUrl = (data) => {
+  const str = JSON.stringify(data);
+  const match = str.match(/"page_url"\s*:\s*"([^"]+)"/);
+  if (match) return match[1];
+  return data?.result?.page_url || data?.page_url || 'https://chat.qwen.ai/';
 };
 
-// ── Extract image URL from AgentX reply ──────────────────────────
-const extractImageUrl = (text) => {
-  const match = text.match(/https?:\/\/[^\s"')]+(?:\.png|\.jpg|\.jpeg|\.webp|\.gif)/i)
-    || text.match(/https?:\/\/[^\s"')]+/);
-  return match ? match[0] : null;
-};
-
-// ──────────────────────────────────────────────────────────────────
-// POST /api/content/image — Generate image via AgentX image agent
-// ──────────────────────────────────────────────────────────────────
-router.post('/image', async (req, res) => {
+// ─────────────────────────────────────────────────────────────
+// POST /api/content/video
+// Body: { prompt, aspectRatio }
+// Step 1 of 2 — submits to Qwen, returns pageUrl for polling
+// ─────────────────────────────────────────────────────────────
+router.post('/video', async (req, res) => {
   try {
-    const { prompt, style = 'photorealistic' } = req.body;
+    const { prompt, aspectRatio = '16:9' } = req.body;
     if (!prompt) return res.status(400).json({ message: 'prompt is required' });
 
-    const agentId = process.env.AGENTX_IMAGE_AGENT_ID;
-    if (!agentId) return res.status(500).json({ message: 'AGENTX_IMAGE_AGENT_ID not set in .env' });
+    const goal = `
+1. Navigate to https://chat.qwen.ai/ and wait for full page load.
+2. If not logged in, login with email: ${QWEN_EMAIL} and password: ${QWEN_PASSWORD}.
+3. Wait for the main chat interface to fully load.
+4. Find the + icon next to the chat input box at the bottom and click it.
+5. In the dropdown that appears, click "Create Video".
+6. On the right side of the Create Video area, find aspect ratio buttons: 1:1, 3:4, 4:3, 16:9, 9:16. Click "${aspectRatio}".
+7. Click the text input box and type this exact prompt: ${prompt}
+8. Click the send/submit button to start generation.
+9. Do NOT wait for video to finish.
+10. Return ONLY this JSON: {"page_url": "CURRENT_FULL_URL_OF_PAGE"}
+`.trim();
 
-    const convId = await getOrCreateConversation(agentId, null);
-    const fullPrompt = `Generate an image: ${prompt}. Style: ${style}. Please generate and show the image.`;
-    const reply = await sendToAgent(convId, fullPrompt);
-    const imageUrl = extractImageUrl(reply);
+    const { data } = await axios.post(TINYFISH_URL, {
+      url: 'https://chat.qwen.ai/',
+      goal,
+      return_type: 'text',
+      timeout: 300,
+    }, { headers: tfHeaders() });
 
-    res.json({ reply, imageUrl, conversationId: convId });
+    const pageUrl = extractPageUrl(data);
+
+    res.json({
+      status: 'pending',
+      pageUrl,
+      message: '🎬 Video submitted! Ready in ~4 minutes.',
+      waitMs: 240000,
+    });
+  } catch (err) {
+    console.error('Video step1 error:', err.response?.data || err.message);
+    res.status(500).json({ message: err.response?.data?.message || err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/content/video/result
+// Body: { pageUrl }
+// Step 2 — retrieves download URL from Qwen page
+// ─────────────────────────────────────────────────────────────
+router.post('/video/result', async (req, res) => {
+  try {
+    const { pageUrl } = req.body;
+    if (!pageUrl) return res.status(400).json({ message: 'pageUrl is required' });
+
+    const goal = `
+1. If not logged in, login with email: ${QWEN_EMAIL} and password: ${QWEN_PASSWORD}.
+2. This page shows a recently generated video.
+3. Wait for the video generation to complete if still processing.
+4. Once complete, right click the download button and copy the exact link address.
+5. Return that EXACT download URL as plain text.
+`.trim();
+
+    const { data } = await axios.post(TINYFISH_URL, {
+      url: pageUrl,
+      goal,
+      return_type: 'text',
+      timeout: 300,
+    }, { headers: tfHeaders() });
+
+    const videoUrl = extractMediaUrl(data);
+
+    if (!videoUrl) {
+      return res.json({ status: 'pending', message: 'Still generating, try again in 1 minute.' });
+    }
+
+    res.json({ status: 'completed', videoUrl });
+  } catch (err) {
+    console.error('Video result error:', err.response?.data || err.message);
+    res.status(500).json({ message: err.response?.data?.message || err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/content/image
+// Body: { prompt, aspectRatio }
+// Single call — Qwen generates image and returns URL
+// ─────────────────────────────────────────────────────────────
+router.post('/image', async (req, res) => {
+  try {
+    const { prompt, aspectRatio = '1:1' } = req.body;
+    if (!prompt) return res.status(400).json({ message: 'prompt is required' });
+
+    const goal = `
+1. Navigate to https://chat.qwen.ai/ and wait for full page load.
+2. If not logged in, login with email: ${QWEN_EMAIL} and password: ${QWEN_PASSWORD}.
+3. Wait for the main chat interface to fully load.
+4. Find the + icon next to the chat input box at the bottom and click it.
+5. In the dropdown that appears, click "Create Image".
+6. On the right side of the Create Image area, find aspect ratio buttons: 1:1, 3:4, 4:3, 16:9, 9:16. Click "${aspectRatio}".
+7. Click the text input box and type this exact prompt: ${prompt}
+8. Click the send/submit button to generate the image.
+9. Wait for the image to fully appear on screen (15-30 seconds).
+10. Once image is visible, right click on it and copy the image address/URL.
+11. Return ONLY this JSON: {"image_url": "THE_EXACT_IMAGE_URL"}
+`.trim();
+
+    const { data } = await axios.post(TINYFISH_URL, {
+      url: 'https://chat.qwen.ai/',
+      goal,
+      return_type: 'text',
+      timeout: 300,
+    }, { headers: tfHeaders() });
+
+    const imageUrl = extractMediaUrl(data);
+
+    if (!imageUrl) {
+      return res.status(500).json({ message: 'Could not get image URL. Please try again.' });
+    }
+
+    res.json({ status: 'completed', imageUrl });
   } catch (err) {
     console.error('Image gen error:', err.response?.data || err.message);
     res.status(500).json({ message: err.response?.data?.message || err.message });
   }
 });
 
-// ──────────────────────────────────────────────────────────────────
-// POST /api/content/video — Generate video via Magic Hour API
-// ──────────────────────────────────────────────────────────────────
-router.post('/video', async (req, res) => {
+// ─────────────────────────────────────────────────────────────
+// POST /api/content/tts
+// Body: { text, voice }
+// Formats text for Web Speech API (browser-native, free)
+// ─────────────────────────────────────────────────────────────
+router.post('/tts', async (req, res) => {
   try {
-    const { prompt, duration = 5 } = req.body;
-    if (!prompt) return res.status(400).json({ message: 'prompt is required' });
+    const { text, voice = 'female' } = req.body;
+    if (!text) return res.status(400).json({ message: 'text is required' });
 
-    if (!MAGIC_HOUR_KEY) {
-      return res.status(500).json({ message: 'MAGIC_HOUR_API_KEY not set in .env' });
-    }
-
-    // Magic Hour text-to-video endpoint
+    // Enhance text for natural speech via OpenRouter
     const { data } = await axios.post(
-      'https://api.magichour.ai/api/v1/text-to-video',
+      'https://openrouter.ai/api/v1/chat/completions',
       {
-        prompt,
-        duration: Number(duration),
-        aspect_ratio: '16:9',
+        model: 'google/gemini-2.5-flash-lite-preview-06-2025',
+        max_tokens: 500,
+        messages: [{
+          role: 'user',
+          content: `Format this for clear ${voice} voice narration. Add natural "..." pauses. Return ONLY the formatted text:\n\n${text}`,
+        }],
       },
       {
         headers: {
-          'Authorization': `Bearer ${MAGIC_HOUR_KEY}`,
+          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
           'Content-Type': 'application/json',
-        }
+        },
+        timeout: 15000,
       }
     );
-
-    // Magic Hour returns a job ID for async processing
-    const jobId = data.id || data.job_id || data.jobId;
-    res.json({
-      status: 'pending',
-      jobId,
-      message: '🎬 Video generation started. Polling for completion...',
-    });
-  } catch (err) {
-    console.error('Video gen error:', err.response?.data || err.message);
-    res.status(500).json({ message: err.response?.data?.message || err.message });
+    const formattedText = data?.choices?.[0]?.message?.content?.trim() || text;
+    res.json({ formattedText, originalText: text });
+  } catch {
+    res.json({ formattedText: req.body.text, originalText: req.body.text });
   }
 });
 
-// ──────────────────────────────────────────────────────────────────
-// GET /api/content/video/status/:jobId — Poll Magic Hour job status
-// ──────────────────────────────────────────────────────────────────
-router.get('/video/status/:jobId', async (req, res) => {
-  try {
-    const { jobId } = req.params;
-    const { data } = await axios.get(
-      `https://api.magichour.ai/api/v1/text-to-video/${jobId}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${MAGIC_HOUR_KEY}`,
-          'Content-Type': 'application/json',
-        }
-      }
-    );
-
-    const status = data.status === 'complete' ? 'completed'
-      : data.status === 'failed' ? 'failed'
-      : 'pending';
-
-    res.json({
-      status,
-      videoUrl: data.download_url || data.video_url || data.url || null,
-      message: data.status,
-    });
-  } catch (err) {
-    console.error('Video poll error:', err.response?.data || err.message);
-    res.status(500).json({ message: err.response?.data?.message || err.message });
-  }
-});
-
-// ──────────────────────────────────────────────────────────────────
-// POST /api/content/tts — Text to Speech via AgentX Voice API
-// ──────────────────────────────────────────────────────────────────
-router.post('/tts', async (req, res) => {
-  try {
-    const { text, voice = 'en-US-Neural2-F' } = req.body;
-    if (!text) return res.status(400).json({ message: 'text is required' });
-    if (text.length > 2000) return res.status(400).json({ message: 'Text too long (max 2000 chars)' });
-
-    const { data } = await axios.post(
-      `${AGENTX_BASE}/voiceApi/tts/synthesize`,
-      { text, voice },
-      { headers: agentxHeaders(), responseType: 'arraybuffer' }
-    );
-
-    // Return as base64 so frontend can play it directly
-    const base64Audio = Buffer.from(data).toString('base64');
-    res.json({ audioBase64: base64Audio, voice });
-  } catch (err) {
-    console.error('TTS error:', err.response?.data || err.message);
-    // Try JSON error from arraybuffer response
-    let msg = err.message;
-    try {
-      if (err.response?.data) {
-        const text = Buffer.from(err.response.data).toString('utf8');
-        msg = JSON.parse(text)?.message || msg;
-      }
-    } catch {}
-    res.status(500).json({ message: msg });
-  }
-});
-
-// ──────────────────────────────────────────────────────────────────
-// POST /api/content/asr — Speech to Text via AgentX Voice API
-// ──────────────────────────────────────────────────────────────────
-router.post('/asr', async (req, res) => {
-  try {
-    const { audioBase64, language = '' } = req.body;
-    if (!audioBase64) return res.status(400).json({ message: 'audioBase64 is required' });
-
-    const body = { audio: audioBase64 };
-    if (language) body.language = language;
-
-    const { data } = await axios.post(
-      `${AGENTX_BASE}/voiceApi/asr/recognize`,
-      body,
-      { headers: agentxHeaders() }
-    );
-
-    res.json({
-      transcript: data.text || data.transcript || data.result || '',
-      language: data.language || language,
-    });
-  } catch (err) {
-    console.error('ASR error:', err.response?.data || err.message);
-    res.status(500).json({ message: err.response?.data?.message || err.message });
-  }
-});
-
-// ──────────────────────────────────────────────────────────────────
-// POST /api/content/chat — Content Writing via AgentX chat agent
-// ──────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// POST /api/content/chat
+// Body: { message, contentType, conversationHistory }
+// AI content writing via OpenRouter
+// ─────────────────────────────────────────────────────────────
 router.post('/chat', async (req, res) => {
   try {
-    const { message, contentType = 'caption', conversationId } = req.body;
+    const { message, contentType = 'caption', conversationHistory = [] } = req.body;
     if (!message) return res.status(400).json({ message: 'message is required' });
 
-    const agentId = process.env.AGENTX_CHAT_AGENT_ID;
-    if (!agentId) return res.status(500).json({ message: 'AGENTX_CHAT_AGENT_ID not set in .env' });
-
-    const contextMap = {
-      caption: 'Write an engaging social media caption.',
-      script: 'Write a video script. Include intro, main content, and CTA.',
-      blog: 'Write a well-structured blog post.',
-      linkedin: 'Write a professional LinkedIn post with a hook and insights.',
-      tweet: 'Write concise, punchy tweet(s) under 280 characters each.',
-      youtube: 'Write a YouTube video description with SEO keywords and timestamps.',
+    const systemPrompts = {
+      caption: 'You are an expert social media copywriter. Write engaging, viral captions with perfect hooks, emojis, and hashtags.',
+      script: 'You are a professional video scriptwriter. Write compelling scripts with strong hooks, clear structure, and a powerful CTA.',
+      blog: 'You are a professional blog writer. Write well-structured, SEO-friendly blog content with clear paragraphs.',
+      linkedin: 'You are a LinkedIn content expert. Write professional yet personal posts that drive engagement.',
+      tweet: 'You are a Twitter/X expert. Write punchy, viral tweets under 280 characters.',
+      youtube: 'You are a YouTube SEO expert. Write optimized video descriptions with keywords and CTAs.',
     };
 
-    const systemContext = contextMap[contentType] || '';
-    const fullMessage = systemContext ? `${systemContext}\n\nRequest: ${message}` : message;
+    const { data } = await axios.post(
+      'https://openrouter.ai/api/v1/chat/completions',
+      {
+        model: 'google/gemini-2.5-flash-lite-preview-06-2025',
+        max_tokens: 1000,
+        messages: [
+          { role: 'system', content: systemPrompts[contentType] || systemPrompts.caption },
+          ...conversationHistory.slice(-6),
+          { role: 'user', content: message },
+        ],
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://synapsocial.vercel.app',
+          'X-Title': 'SynapSocial',
+        },
+        timeout: 20000,
+      }
+    );
 
-    const convId = await getOrCreateConversation(agentId, conversationId);
-    const reply = await sendToAgent(convId, fullMessage);
-
-    res.json({ reply, conversationId: convId });
+    const reply = data?.choices?.[0]?.message?.content?.trim();
+    if (!reply) throw new Error('Empty AI response');
+    res.json({ reply });
   } catch (err) {
     console.error('Content chat error:', err.response?.data || err.message);
     res.status(500).json({ message: err.response?.data?.message || err.message });
