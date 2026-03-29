@@ -1,5 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
+import Trends from './Trends';
+import Platforms from './Platforms';
+import Jobs from './Jobs';
+import Settings from './Settings';
+import Content from './Content';
 
 // Mic button for voice input
 function MicBtn({ onResult, color = '#7c3aed' }) {
@@ -17,12 +22,7 @@ function MicBtn({ onResult, color = '#7c3aed' }) {
     r.start(); recRef.current = r; setActive(true);
   };
   return <button onClick={toggle} title={active ? 'Stop' : 'Speak'} style={{ padding: '0.35rem 0.45rem', background: active ? '#ef444422' : 'transparent', color: active ? '#ef4444' : '#555', border: `1px solid ${active ? '#ef444444' : 'transparent'}`, borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', flexShrink: 0, transition: 'all 0.2s', animation: active ? 'micpulse 1s infinite' : 'none' }}>🎙️</button>;
-}
-import Trends from './Trends';
-import Platforms from './Platforms';
-import Jobs from './Jobs';
-import Settings from './Settings';
-import Content from './Content'; 
+} 
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://synapsocial-api.onrender.com';
 
