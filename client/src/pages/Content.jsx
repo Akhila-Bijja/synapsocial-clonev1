@@ -381,12 +381,29 @@ function SpeechToText({ onGenDone }) {
   const [recording, setRecording] = useState(false); const [transcript, setTranscript] = useState(''); const [interim, setInterim] = useState('');
   const [error, setError] = useState(''); const [seconds, setSeconds] = useState(0); const [lang, setLang] = useState('en-US');
   const recRef = useRef(null); const timerRef = useRef(null); const isRec = useRef(false);
+  const silenceRef = useRef(null); // auto-stop after silence
   const lastLoggedRef = useRef('');
   const langs = [{ code: 'en-US', label: '🇺🇸 English (US)' }, { code: 'en-GB', label: '🇬🇧 English (UK)' }, { code: 'hi-IN', label: '🇮🇳 Hindi' }, { code: 'es-ES', label: '🇪🇸 Spanish' }, { code: 'fr-FR', label: '🇫🇷 French' }, { code: 'de-DE', label: '🇩🇪 German' }, { code: 'zh-CN', label: '🇨🇳 Chinese' }, { code: 'ja-JP', label: '🇯🇵 Japanese' }];
+
   const stop = useCallback(() => {
-    isRec.current = false; setRecording(false); setInterim(''); clearInterval(timerRef.current);
-    try { recRef.current?.abort(); } catch { } recRef.current = null;
+    // Kill the silence timer
+    clearTimeout(silenceRef.current); silenceRef.current = null;
+    // Mark stopped FIRST
+    isRec.current = false;
+    // Grab ref, null it immediately so onend can't restart
+    const rec = recRef.current;
+    recRef.current = null;
+    // Clean up UI
+    setRecording(false); setInterim(''); clearInterval(timerRef.current);
+    // Now kill the recognition — onend will fire but recRef is already null
+    if (rec) {
+      try { rec.stop(); } catch { }
+      try { rec.abort(); } catch { }
+    }
   }, []);
+
+  // Cleanup on unmount
+  useEffect(() => () => stop(), [stop]);
 
   // Log transcript to history when recording stops and there's content
   useEffect(() => {
@@ -396,18 +413,53 @@ function SpeechToText({ onGenDone }) {
     }
   }, [recording, transcript, onGenDone]);
 
+  // Reset silence timer — called every time speech is detected
+  const resetSilenceTimer = useCallback(() => {
+    clearTimeout(silenceRef.current);
+    silenceRef.current = setTimeout(() => {
+      // 5 seconds of no speech → auto-stop
+      if (isRec.current) stop();
+    }, 5000);
+  }, [stop]);
+
   const start = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { setError('Not supported. Use Chrome or Edge.'); return; }
     const r = new SR(); r.lang = lang; r.continuous = true; r.interimResults = true;
-    r.onresult = (e) => { if (!isRec.current) return; let fin = '', inter = ''; for (let i = e.resultIndex; i < e.results.length; i++) { if (e.results[i].isFinal) fin += e.results[i][0].transcript; else inter += e.results[i][0].transcript; } if (fin) setTranscript(p => p + fin + ' '); setInterim(inter); };
-    r.onend = () => { if (isRec.current) { try { r.start(); } catch { stop(); } } };
-    r.onerror = (e) => { if (e.error === 'no-speech') return; setError('Mic error: ' + e.error); stop(); };
+    r.onresult = (e) => {
+      if (!isRec.current) return;
+      let fin = '', inter = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) fin += e.results[i][0].transcript;
+        else inter += e.results[i][0].transcript;
+      }
+      if (fin) setTranscript(p => p + fin + ' ');
+      setInterim(inter);
+      // Reset the silence auto-stop timer on every result
+      resetSilenceTimer();
+    };
+    r.onend = () => {
+      // Only restart if we're still supposed to be recording AND ref still points to this instance
+      if (isRec.current && recRef.current === r) {
+        try { r.start(); } catch { stop(); }
+      }
+    };
+    r.onerror = (e) => {
+      if (e.error === 'no-speech') {
+        // no-speech after silence → auto-stop
+        if (isRec.current) stop();
+        return;
+      }
+      if (e.error === 'aborted') return; // we triggered this ourselves
+      setError('Mic error: ' + e.error); stop();
+    };
     recRef.current = r; isRec.current = true; r.start();
     setRecording(true); setError(''); setSeconds(0);
     timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000);
+    // Start silence timer (auto-stop if no speech for 5s)
+    resetSilenceTimer();
   };
-  const toggle = () => recording ? stop() : start();
+  const toggle = () => isRec.current ? stop() : start();
   const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
