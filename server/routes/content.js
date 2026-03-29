@@ -188,7 +188,7 @@ router.post('/tts', async (req, res) => {
     const { data } = await axios.post(
       'https://openrouter.ai/api/v1/chat/completions',
       {
-        model: 'google/gemini-2.5-flash-lite-preview-06-2025',
+        model: 'google/gemini-2.5-flash-lite-preview-09-2025',
         max_tokens: 400,
         messages: [{
           role: 'user',
@@ -232,7 +232,7 @@ router.post('/chat', async (req, res) => {
     const { data } = await axios.post(
       'https://openrouter.ai/api/v1/chat/completions',
       {
-        model: 'google/gemini-2.5-flash-lite-preview-06-2025',
+        model: 'google/gemini-2.5-flash-lite-preview-09-2025',
         max_tokens: 400,
         messages: [
           { role: 'system', content: systemPrompts[contentType] || systemPrompts.caption },
