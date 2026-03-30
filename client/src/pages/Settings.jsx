@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://synapsocial-api.onrender.com';
+const API_URL = process.env.REACT_APP_API_URL || 'https://synapsocial-clonev-1.onrender.com';
 
 // Apply theme globally
 const applyTheme = (theme) => {

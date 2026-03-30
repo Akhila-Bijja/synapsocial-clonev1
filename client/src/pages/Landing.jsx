@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-const API_URL = process.env.REACT_APP_API_URL || 'https://synapsocial-api.onrender.com';
+const API_URL = process.env.REACT_APP_API_URL || 'https://synapsocial-clonev-1.onrender.com';
 
 export default function Landing() {
   const navigate = useNavigate();

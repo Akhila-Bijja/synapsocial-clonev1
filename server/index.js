@@ -16,7 +16,7 @@ app.use(morgan('dev'));
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'https://synapsocial.vercel.app',
+    'https://synapsocial-clonev1-miwe.vercel.app',
     /\.vercel\.app$/
   ],
   credentials: true

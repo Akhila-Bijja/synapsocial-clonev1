@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-const API_URL = process.env.REACT_APP_API_URL || 'https://synapsocial-api.onrender.com';
+const API_URL = process.env.REACT_APP_API_URL || 'https://synapsocial-clonev-1.onrender.com';
 
 export default function Login() {
   const [mode, setMode] = useState('home');
@@ -11,7 +11,7 @@ export default function Login() {
   const navigate = useNavigate();
 
   const handleGoogleLogin = () => {
-  const apiUrl = API_URL || 'https://synapsocial-api.onrender.com';
+  const apiUrl = API_URL || 'https://synapsocial-clonev-1.onrender.com';
   window.location.href = `${apiUrl}/api/auth/google`;
 };
   const handleChange = (e) => { setForm({ ...form, [e.target.name]: e.target.value }); setError(''); };

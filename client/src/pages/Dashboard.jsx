@@ -24,7 +24,7 @@ function MicBtn({ onResult, color = '#7c3aed' }) {
   return <button onClick={toggle} title={active ? 'Stop' : 'Speak'} style={{ padding: '0.35rem 0.45rem', background: active ? '#ef444422' : 'transparent', color: active ? '#ef4444' : '#555', border: `1px solid ${active ? '#ef444444' : 'transparent'}`, borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', flexShrink: 0, transition: 'all 0.2s', animation: active ? 'micpulse 1s infinite' : 'none' }}>🎙️</button>;
 } 
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://synapsocial-api.onrender.com';
+const API_URL = process.env.REACT_APP_API_URL || 'https://synapsocial-clonev-1.onrender.com';
 
 const platforms = ['General', 'LinkedIn', 'Instagram', 'YouTube'];
 

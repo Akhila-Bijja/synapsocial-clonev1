@@ -151,7 +151,7 @@ Email: ${body?.slice(0, 600)}
 Rules: Write ONLY the reply body. No "Subject:", no "Dear...", no sign-off. Just the reply text. Keep it concise and human.`
         }]
       },
-      { headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://synapsocial.vercel.app' } }
+      { headers: { 'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://synapsocial-clonev1-miwe-qt7d2ouuh-akhila-bijjas-projects.vercel.app' } }
     );
     res.json({ reply: aiRes.data.choices[0].message.content.trim() });
   } catch (err) { res.status(500).json({ message: 'AI error', error: err.message }); }

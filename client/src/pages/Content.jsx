@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://synapsocial-api.onrender.com';
+const API_URL = process.env.REACT_APP_API_URL || 'https://synapsocial-clonev-1.onrender.com';
 const ASPECT_RATIOS = ['1:1', '3:4', '4:3', '16:9', '9:16'];
 const TABS = [
   { id: 'video', icon: '🎬', label: 'Video Gen' },

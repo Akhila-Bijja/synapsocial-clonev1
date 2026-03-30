@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://synapsocial-api.onrender.com';
+const API_URL = process.env.REACT_APP_API_URL || 'https://synapsocial-clonev-1.onrender.com';
 const niches = ['social media', 'tech', 'finance', 'fitness', 'startup', 'AI', 'crypto', 'marketing'];
 
 export default function Trends() {

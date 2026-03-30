@@ -52,7 +52,7 @@ const generateAIReply = async (prompt) => {
       headers: {
         Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://synapsocial.vercel.app',
+        'HTTP-Referer': 'https://synapsocial-clonev1-miwe-qt7d2ouuh-akhila-bijjas-projects.vercel.app',
         'X-Title': 'SynapSocial',
       },
       timeout: 15000,
