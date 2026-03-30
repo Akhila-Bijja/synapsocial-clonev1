@@ -10,12 +10,20 @@ passport.use(new GoogleStrategy({
   try {
     let user = await User.findOne({ googleId: profile.id });
     if (!user) {
-      user = await User.create({
-        googleId: profile.id,
-        name: profile.displayName,
-        email: profile.emails[0].value,
-        avatar: profile.photos[0].value
-      });
+      user = await User.findOne({ email: profile.emails[0].value });
+      if (user) {
+        user.googleId = profile.id;
+        user.avatar = user.avatar || profile.photos[0].value;
+        user.name = user.name || profile.displayName;
+        await user.save();
+      } else {
+        user = await User.create({
+          googleId: profile.id,
+          name: profile.displayName,
+          email: profile.emails[0].value,
+          avatar: profile.photos[0].value
+        });
+      }
     }
     return done(null, user);
   } catch (err) {

@@ -26,6 +26,10 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
 
 const isProduction = process.env.NODE_ENV === 'production';
+if (isProduction) {
+  app.set('trust proxy', 1); // Required for secure cookies over Render HTTPS
+}
+
 app.use(session({
   secret: process.env.JWT_SECRET || 'synapsocial_secret_fallback',
   resave: true,
